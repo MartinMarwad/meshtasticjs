@@ -19,8 +19,9 @@ dist
 node_modules
 
 # Application Files
-src/generated/*.ts
+src/generated/**/*.ts
 !src/generated/index.ts
+!src/generated/imports.ts
 
 # Misc
 .DS_Store

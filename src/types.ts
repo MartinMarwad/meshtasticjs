@@ -1,9 +1,10 @@
 import type {
   IBLEConnection,
   IHTTPConnection,
-  ISerialConnection,
-  Protobuf
+  ISerialConnection
 } from "./index.js";
+import { messages } from "./generated/index.js";
+import { Level } from "./generated/imports.js";
 
 export enum DeviceStatusEnum {
   DEVICE_RESTARTING,
@@ -54,98 +55,98 @@ export interface SerialConnectionParameters {
 export type LogEventPacket = LogEvent & { date: Date };
 
 export interface NodeInfoPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.NodeInfo;
+  packet: messages.MeshPacket;
+  data: messages.NodeInfo;
 }
 
 export interface UserPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.User;
+  packet: messages.MeshPacket;
+  data: messages.User;
 }
 
 export interface RoutingPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Routing;
+  packet: messages.MeshPacket;
+  data: messages.Routing;
 }
 
 export interface PositionPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Position;
+  packet: messages.MeshPacket;
+  data: messages.Position;
 }
 
 export interface MessagePacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   text: string;
 }
 
 export interface PingPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface IpTunnelPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface SerialPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface StoreForwardPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface RangeTestPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface TelemetryPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Telemetry;
+  packet: messages.MeshPacket;
+  data: messages.Telemetry;
 }
 
 export interface PrivatePacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface AtakPacket {
-  packet: Protobuf.MeshPacket;
+  packet: messages.MeshPacket;
   data: Uint8Array;
 }
 
 export interface RemoteHardwarePacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.HardwareMessage;
+  packet: messages.MeshPacket;
+  data: messages.HardwareMessage;
 }
 
 export interface ChannelPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Channel;
+  packet: messages.MeshPacket;
+  data: messages.Channel;
 }
 
 export interface ConfigPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Config;
+  packet: messages.MeshPacket;
+  data: messages.Config;
 }
 
 export interface ModuleConfigPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.ModuleConfig;
+  packet: messages.MeshPacket;
+  data: messages.ModuleConfig;
 }
 
 export interface DeviceMetadataPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.DeviceMetadata;
+  packet: messages.MeshPacket;
+  data: messages.DeviceMetadata;
 }
 
 export interface WaypointPacket {
-  packet: Protobuf.MeshPacket;
-  data: Protobuf.Waypoint;
+  packet: messages.MeshPacket;
+  data: messages.Waypoint;
 }
 
 export enum EmitterScope {
@@ -190,7 +191,7 @@ export interface LogEvent {
   scope: EmitterScope;
   emitter: Emitter;
   message: string;
-  level: Protobuf.LogRecord_Level;
+  level: Level;
   packet?: Uint8Array;
 }
 

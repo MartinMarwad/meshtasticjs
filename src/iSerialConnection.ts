@@ -1,4 +1,4 @@
-import { Protobuf, Types } from "./index.js";
+import { Types } from "./index.js";
 import { IMeshDevice } from "./iMeshDevice.js";
 
 /** Allows to connect to a Meshtastic device over WebSerial */
@@ -44,7 +44,7 @@ export class ISerialConnection extends IMeshDevice {
           Types.EmitterScope.iSerialConnection,
           Types.Emitter.readFromRadio,
           `Device errored or disconnected: ${error as string}`,
-          Protobuf.LogRecord_Level.INFO
+          "INFO"
         );
         await this.disconnect();
       }
@@ -90,7 +90,7 @@ export class ISerialConnection extends IMeshDevice {
         Types.EmitterScope.iSerialConnection,
         Types.Emitter.connect,
         `⚠️ This browser doesn't support the WebSerial API`,
-        Protobuf.LogRecord_Level.WARNING
+        "WARNING"
       );
     }
 
@@ -106,7 +106,7 @@ export class ISerialConnection extends IMeshDevice {
         Types.EmitterScope.iSerialConnection,
         Types.Emitter.connect,
         "Device disconnected",
-        Protobuf.LogRecord_Level.INFO
+        "INFO"
       );
       this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_DISCONNECTED);
       this.complete();
@@ -140,7 +140,7 @@ export class ISerialConnection extends IMeshDevice {
                     `⚠️ Found unneccesary message padding, removing: ${byteBuffer
                       .subarray(0, framingIndex)
                       .toString()}`,
-                    Protobuf.LogRecord_Level.WARNING
+                    "WARNING"
                   );
                 }
 
@@ -170,7 +170,7 @@ export class ISerialConnection extends IMeshDevice {
                     `⚠️ Malformed packet found, discarding: ${byteBuffer
                       .subarray(0, malformedDetectorIndex - 1)
                       .toString()}`,
-                    Protobuf.LogRecord_Level.WARNING
+                    "WARNING"
                   );
 
                   byteBuffer = byteBuffer.subarray(malformedDetectorIndex);

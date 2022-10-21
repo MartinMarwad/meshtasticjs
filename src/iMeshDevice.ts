@@ -1,9 +1,27 @@
 import { SubEvent } from "sub-events";
 
 import { broadCastNum, minFwVer } from "./constants.js";
-import { Protobuf, Types } from "./index.js";
+import { Types } from "./index.js";
 import { log } from "./utils/logging.js";
 import { Queue } from "./utils/queue.js";
+import {
+  AdminMessage,
+  Channel,
+  ConfigType,
+  FromRadio,
+  HardwareMessage,
+  Level,
+  MeshPacket,
+  ModuleConfigType,
+  MyNodeInfo,
+  Position,
+  Routing,
+  Telemetry,
+  ToRadio,
+  User,
+  Waypoint
+} from "./generated/imports.js";
+import { messages } from "./generated/index.js";
 
 /** Base class for connection methods to extend */
 export abstract class IMeshDevice {
@@ -15,7 +33,7 @@ export abstract class IMeshDevice {
     scope: Types.EmitterScope,
     emitter: Types.Emitter,
     message: string,
-    level: Protobuf.LogRecord_Level,
+    level: Level,
     packet?: Uint8Array
   ) => void;
 
@@ -26,7 +44,7 @@ export abstract class IMeshDevice {
   protected isConfigured: boolean;
 
   /** Device's node number */
-  private myNodeInfo: Protobuf.MyNodeInfo;
+  private myNodeInfo: messages.MyNodeInfo;
 
   /** Randomly generated number to ensure confiuration lockstep */
   public configId: number;
@@ -38,7 +56,7 @@ export abstract class IMeshDevice {
   public queue: Queue;
 
   /** Sets the library-wide logging level */
-  public logLevel: Protobuf.LogRecord_Level = Protobuf.LogRecord_Level.WARNING;
+  public logLevel: Level = "WARNING";
 
   constructor(configId?: number) {
     this.log = (scope, emitter, message, level, packet): void => {
@@ -55,7 +73,7 @@ export abstract class IMeshDevice {
 
     this.deviceStatus = Types.DeviceStatusEnum.DEVICE_DISCONNECTED;
     this.isConfigured = false;
-    this.myNodeInfo = Protobuf.MyNodeInfo.create();
+    this.myNodeInfo = MyNodeInfo.createValue({}); //TODO: maybe init default?
     this.configId = configId ?? this.generateRandId();
     this.queue = new Queue();
 
@@ -98,7 +116,7 @@ export abstract class IMeshDevice {
    *
    * @event onFromRadio
    */
-  public readonly onFromRadio = new SubEvent<Protobuf.FromRadio>();
+  public readonly onFromRadio = new SubEvent<messages.FromRadio>();
 
   /**
    * Fires when a new FromRadio message containing a Data packet has been
@@ -106,14 +124,14 @@ export abstract class IMeshDevice {
    *
    * @event onMeshPacket
    */
-  public readonly onMeshPacket = new SubEvent<Protobuf.MeshPacket>();
+  public readonly onMeshPacket = new SubEvent<messages.MeshPacket>();
 
   /**
    * Fires when a new MyNodeInfo message has been received from the device
    *
    * @event onMyNodeInfo
    */
-  public readonly onMyNodeInfo = new SubEvent<Protobuf.MyNodeInfo>();
+  public readonly onMyNodeInfo = new SubEvent<messages.MyNodeInfo>();
 
   /**
    * Fires when a new MeshPacket message containing a NodeInfo packet has been
@@ -273,7 +291,7 @@ export abstract class IMeshDevice {
    *
    * @event onLogRecord
    */
-  public readonly onLogRecord = new SubEvent<Protobuf.LogRecord>();
+  public readonly onLogRecord = new SubEvent<messages.LogRecord>();
 
   /**
    * Fires when the device receives a meshPacket, returns a timestamp
@@ -300,9 +318,9 @@ export abstract class IMeshDevice {
   /**
    * Sets the desired logging level for this device
    *
-   * @param {Protobuf.LogRecord_Level} level Desired logging level
+   * @param {LogRecord_Level} level Desired logging level
    */
-  public setLogLevel(level: Protobuf.LogRecord_Level): void {
+  public setLogLevel(level: Level): void {
     this.logLevel = level;
   }
 
@@ -332,14 +350,14 @@ export abstract class IMeshDevice {
       `📤 Sending message to ${
         destinationNum ?? "broadcast"
       } on channel ${channel.toString()}`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
     const enc = new TextEncoder();
 
     return this.sendPacket(
       enc.encode(text),
-      Protobuf.PortNum.TEXT_MESSAGE_APP,
+      "TEXT_MESSAGE_APP",
       destinationNum,
       wantAck,
       channel,
@@ -352,7 +370,7 @@ export abstract class IMeshDevice {
   /**
    * Sends a text over the radio
    *
-   * @param {Protobuf.Waypoint} waypoint Desired waypoint to send
+   * @param {Waypoint} waypoint Desired waypoint to send
    * @param {number} destinationNum Node number of the destination node
    * @param {boolean} wantAck Whether or not acknowledgement is wanted
    * @param {Types.ChannelNumber} [channel=Types.ChannelNumber.PRIMARY] Channel
@@ -362,7 +380,7 @@ export abstract class IMeshDevice {
    * @returns {Promise<void>}
    */
   public sendWaypoint(
-    waypoint: Protobuf.Waypoint,
+    waypoint: messages.Waypoint,
     destinationNum?: number,
     wantAck = false,
     channel: Types.ChannelNumber = Types.ChannelNumber.PRIMARY,
@@ -374,12 +392,12 @@ export abstract class IMeshDevice {
       `📤 Sending waypoint to ${
         destinationNum ?? "broadcast"
       } on channel ${channel.toString()}`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
     return this.sendPacket(
-      Protobuf.Waypoint.toBinary(waypoint),
-      Protobuf.PortNum.WAYPOINT_APP,
+      Waypoint.encodeBinary(waypoint),
+      "WAYPOINT_APP",
       destinationNum,
       wantAck,
       channel,
@@ -394,12 +412,11 @@ export abstract class IMeshDevice {
    * Sends packet over the radio
    *
    * @param {Uint8Array} byteData Raw bytes to send
-   * @param {Protobuf.PortNum} portNum DataType Enum of protobuf data type
+   * @param {PortNum} portNum DataType Enum of protobuf data type
    * @param {number} [destinationNum] Node number of the destination node
    * @param {boolean} [wantAck=false] Whether or not acknowledgement is wanted.
    *   Default is `false`
-   * @param {Types.ChannelNumber} [channel=Types.ChannelNumber.PRIMARY] Channel
-   *   to send. Default is `Types.ChannelNumber.PRIMARY`
+   * @param {Types.ChannelNumber} [channel=0] Channel to send. Default is `0`
    * @param {boolean} [wantResponse=false] Used for testing, requests recpipient
    *   to respond in kind with the same type of request. Default is `false`
    * @param {boolean} [echoResponse=false] Sends event back to client. Default
@@ -411,7 +428,7 @@ export abstract class IMeshDevice {
    */
   public async sendPacket(
     byteData: Uint8Array,
-    portNum: Protobuf.PortNum,
+    portNum: messages.PortNum,
     destinationNum?: number,
     wantAck = false,
     channel: Types.ChannelNumber = Types.ChannelNumber.PRIMARY,
@@ -424,15 +441,14 @@ export abstract class IMeshDevice {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.sendPacket,
-      `📤 Sending ${Protobuf.PortNum[portNum] ?? "UNK"} to ${
-        destinationNum ?? "broadcast"
-      }`,
-      Protobuf.LogRecord_Level.TRACE
+      `📤 Sending ${portNum} to ${destinationNum ?? "broadcast"}`,
+      "TRACE"
     );
 
-    const meshPacket = Protobuf.MeshPacket.create({
+    const meshPacket = MeshPacket.createValue({
       payloadVariant: {
-        decoded: {
+        field: "decoded",
+        value: {
           payload: byteData,
           portnum: portNum,
           wantResponse,
@@ -441,8 +457,7 @@ export abstract class IMeshDevice {
           dest: 0, //change this!
           requestId: 0, //change this!
           source: 0 //change this!
-        },
-        oneofKind: "decoded"
+        }
       },
       from: this.myNodeInfo.myNodeNum,
       to: destinationNum ? destinationNum : broadCastNum,
@@ -451,10 +466,10 @@ export abstract class IMeshDevice {
       channel
     });
 
-    const toRadio = Protobuf.ToRadio.toBinary({
+    const toRadio = ToRadio.encodeBinary({
       payloadVariant: {
-        packet: meshPacket,
-        oneofKind: "packet"
+        field: "packet",
+        value: meshPacket
       }
     });
 
@@ -482,7 +497,7 @@ export abstract class IMeshDevice {
         Types.EmitterScope.iMeshDevice,
         Types.Emitter.sendRaw,
         `Message longer than 512 bytes, it will not be sent!`,
-        Protobuf.LogRecord_Level.WARNING
+        "WARNING"
       );
     } else {
       this.queue.push({
@@ -505,63 +520,63 @@ export abstract class IMeshDevice {
   /**
    * Writes config to device
    *
-   * @param {Protobuf.Config} config Config object
+   * @param {Config} config Config object
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async setConfig(
-    config: Protobuf.Config,
+    config: messages.Config,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.setConfig,
       `Setting config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    let configType: Protobuf.AdminMessage_ConfigType;
+    let configType: ConfigType;
 
-    switch (config.payloadVariant.oneofKind) {
+    switch (config.payloadVariant?.field) {
       case "device":
-        configType = Protobuf.AdminMessage_ConfigType.DEVICE_CONFIG;
+        configType = "DEVICE_CONFIG";
         break;
 
       case "display":
-        configType = Protobuf.AdminMessage_ConfigType.DISPLAY_CONFIG;
+        configType = "DISPLAY_CONFIG";
         break;
 
       case "lora":
-        configType = Protobuf.AdminMessage_ConfigType.LORA_CONFIG;
+        configType = "LORA_CONFIG";
         break;
 
       case "position":
-        configType = Protobuf.AdminMessage_ConfigType.POSITION_CONFIG;
+        configType = "POSITION_CONFIG";
         break;
 
       case "power":
-        configType = Protobuf.AdminMessage_ConfigType.POWER_CONFIG;
+        configType = "POWER_CONFIG";
         break;
 
       case "network":
-        configType = Protobuf.AdminMessage_ConfigType.NETWORK_CONFIG;
+        configType = "NETWORK_CONFIG";
         break;
 
       case "bluetooth":
-        configType = Protobuf.AdminMessage_ConfigType.BLUETOOTH_CONFIG;
+        configType = "BLUETOOTH_CONFIG";
         break;
     }
 
-    const setRadio = Protobuf.AdminMessage.toBinary({
+    const setRadio = AdminMessage.encodeBinary({
       payloadVariant: {
-        oneofKind: "setConfig",
-        setConfig: config
+        field: "setConfig",
+        value: config
       }
     });
 
     await this.sendPacket(
       setRadio,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -577,63 +592,63 @@ export abstract class IMeshDevice {
   /**
    * Writes module config to device
    *
-   * @param {Protobuf.ModuleConfig} config Module config object
+   * @param {ModuleConfig} config Module config object
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async setModuleConfig(
-    config: Protobuf.ModuleConfig,
+    config: messages.ModuleConfig,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.setModuleConfig,
       `Setting module config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    let configType: Protobuf.AdminMessage_ModuleConfigType;
+    let configType: ModuleConfigType;
 
-    switch (config.payloadVariant.oneofKind) {
+    switch (config.payloadVariant?.field) {
       case "mqtt":
-        configType = Protobuf.AdminMessage_ModuleConfigType.MQTT_CONFIG;
+        configType = "MQTT_CONFIG";
         break;
 
       case "serial":
-        configType = Protobuf.AdminMessage_ModuleConfigType.SERIAL_CONFIG;
+        configType = "SERIAL_CONFIG";
         break;
 
       case "externalNotification":
-        configType = Protobuf.AdminMessage_ModuleConfigType.EXTNOTIF_CONFIG;
+        configType = "EXTNOTIF_CONFIG";
         break;
 
       case "storeForward":
-        configType = Protobuf.AdminMessage_ModuleConfigType.STOREFORWARD_CONFIG;
+        configType = "STOREFORWARD_CONFIG";
         break;
 
       case "rangeTest":
-        configType = Protobuf.AdminMessage_ModuleConfigType.RANGETEST_CONFIG;
+        configType = "RANGETEST_CONFIG";
         break;
 
       case "telemetry":
-        configType = Protobuf.AdminMessage_ModuleConfigType.TELEMETRY_CONFIG;
+        configType = "TELEMETRY_CONFIG";
         break;
 
       case "cannedMessage":
-        configType = Protobuf.AdminMessage_ModuleConfigType.CANNEDMSG_CONFIG;
+        configType = "CANNEDMSG_CONFIG";
         break;
     }
 
-    const setRadio = Protobuf.AdminMessage.toBinary({
+    const setRadio = AdminMessage.encodeBinary({
       payloadVariant: {
-        oneofKind: "setModuleConfig",
-        setModuleConfig: config
+        field: "setModuleConfig",
+        value: config
       }
     });
 
     await this.sendPacket(
       setRadio,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -660,19 +675,19 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.confirmSetConfig,
       `Confirming config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const confirmSetRadio = Protobuf.AdminMessage.toBinary({
+    const confirmSetRadio = AdminMessage.encodeBinary({
       payloadVariant: {
-        confirmSetRadio: true,
-        oneofKind: "confirmSetRadio"
+        field: "confirmSetRadio",
+        value: true
       }
     });
 
     await this.sendPacket(
       confirmSetRadio,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -685,31 +700,31 @@ export abstract class IMeshDevice {
   /**
    * Sets devices owner data
    *
-   * @param {Protobuf.User} owner Owner data to apply to the device
+   * @param {User} owner Owner data to apply to the device
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async setOwner(
-    owner: Protobuf.User,
+    owner: messages.User,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.setOwner,
       `Setting owner ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const setOwner = Protobuf.AdminMessage.toBinary({
+    const setOwner = AdminMessage.encodeBinary({
       payloadVariant: {
-        setOwner: owner,
-        oneofKind: "setOwner"
+        field: "setOwner",
+        value: owner
       }
     });
 
     await this.sendPacket(
       setOwner,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -725,12 +740,12 @@ export abstract class IMeshDevice {
   /**
    * Sets devices ChannelSettings
    *
-   * @param {Protobuf.Channel} channel Channel data to be set
+   * @param {Channel} channel Channel data to be set
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async setChannel(
-    channel: Protobuf.Channel,
+    channel: messages.Channel,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
@@ -739,19 +754,19 @@ export abstract class IMeshDevice {
       `📻 Setting Channel: ${channel.index} ${
         callback ? "with" : "without"
       } callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const setChannel = Protobuf.AdminMessage.toBinary({
+    const setChannel = AdminMessage.encodeBinary({
       payloadVariant: {
-        setChannel: channel,
-        oneofKind: "setChannel"
+        field: "setChannel",
+        value: channel
       }
     });
 
     await this.sendPacket(
       setChannel,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -778,19 +793,19 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.confirmSetChannel,
       `📻 Confirming Channel config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const confirmSetChannel = Protobuf.AdminMessage.toBinary({
+    const confirmSetChannel = AdminMessage.encodeBinary({
       payloadVariant: {
-        confirmSetRadio: true,
-        oneofKind: "confirmSetRadio"
+        field: "confirmSetRadio",
+        value: true
       }
     });
 
     await this.sendPacket(
       confirmSetChannel,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -815,23 +830,23 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.clearChannel,
       `📻 Clearing Channel ${index} ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const channel = Protobuf.Channel.create({
+    const channel = Channel.createValue({
       index,
-      role: Protobuf.Channel_Role.DISABLED
+      role: "DISABLED"
     });
-    const setChannel = Protobuf.AdminMessage.toBinary({
+    const setChannel = AdminMessage.encodeBinary({
       payloadVariant: {
-        setChannel: channel,
-        oneofKind: "setChannel"
+        field: "setChannel",
+        value: channel
       }
     });
 
     await this.sendPacket(
       setChannel,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -861,19 +876,19 @@ export abstract class IMeshDevice {
       `📻 Requesting Channel: ${index} ${
         callback ? "with" : "without"
       } callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const getChannelRequest = Protobuf.AdminMessage.toBinary({
+    const getChannelRequest = AdminMessage.encodeBinary({
       payloadVariant: {
-        getChannelRequest: index + 1,
-        oneofKind: "getChannelRequest"
+        field: "getChannelRequest",
+        value: index + 1
       }
     });
 
     await this.sendPacket(
       getChannelRequest,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -886,32 +901,31 @@ export abstract class IMeshDevice {
   /**
    * Gets devices config
    *
-   * @param {Protobuf.AdminMessage_ConfigType} configType Desired config type to
-   *   request
+   * @param {AdminMessage_ConfigType} configType Desired config type to request
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async getConfig(
-    configType: Protobuf.AdminMessage_ConfigType,
+    configType: ConfigType,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.getConfig,
       `Requesting config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const getRadioRequest = Protobuf.AdminMessage.toBinary({
+    const getRadioRequest = AdminMessage.encodeBinary({
       payloadVariant: {
-        oneofKind: "getConfigRequest",
-        getConfigRequest: configType
+        field: "getConfigRequest",
+        value: configType
       }
     });
 
     await this.sendPacket(
       getRadioRequest,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -924,32 +938,32 @@ export abstract class IMeshDevice {
   /**
    * Gets Module config
    *
-   * @param {Protobuf.AdminMessage_ModuleConfigType} moduleConfigType Desired
-   *   module config type to request
+   * @param {AdminMessage_ModuleConfigType} moduleConfigType Desired module
+   *   config type to request
    * @param {(id: number) => Promise<void>} [callback] If wantAck is true,
    *   callback is called when the ack is received
    */
   public async getModuleConfig(
-    moduleConfigType: Protobuf.AdminMessage_ModuleConfigType,
+    moduleConfigType: ModuleConfigType,
     callback?: (id: number) => Promise<void>
   ): Promise<void> {
     this.log(
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.getModuleConfig,
       `Requesting module config ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const getRadioRequest = Protobuf.AdminMessage.toBinary({
+    const getRadioRequest = AdminMessage.encodeBinary({
       payloadVariant: {
-        oneofKind: "getModuleConfigRequest",
-        getModuleConfigRequest: moduleConfigType
+        field: "getModuleConfigRequest",
+        value: moduleConfigType
       }
     });
 
     await this.sendPacket(
       getRadioRequest,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -972,19 +986,19 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.getOwner,
       `Requesting owner ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const getOwnerRequest = Protobuf.AdminMessage.toBinary({
+    const getOwnerRequest = AdminMessage.encodeBinary({
       payloadVariant: {
-        getOwnerRequest: true,
-        oneofKind: "getOwnerRequest"
+        field: "getOwnerRequest",
+        value: true
       }
     });
 
     await this.sendPacket(
       getOwnerRequest,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -1011,19 +1025,19 @@ export abstract class IMeshDevice {
       `Requesting metadata from ${nodeNum} ${
         callback ? "with" : "without"
       } callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const getDeviceMetricsRequest = Protobuf.AdminMessage.toBinary({
+    const getDeviceMetricsRequest = AdminMessage.encodeBinary({
       payloadVariant: {
-        getDeviceMetadataRequest: true,
-        oneofKind: "getDeviceMetadataRequest"
+        field: "getDeviceMetadataRequest",
+        value: true
       }
     });
 
     await this.sendPacket(
       getDeviceMetricsRequest,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       nodeNum,
       true,
       Types.ChannelNumber.ADMIN,
@@ -1047,19 +1061,19 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.resetPeers,
       `📻 Resetting Peers ${callback ? "with" : "without"} callback`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
-    const resetPeers = Protobuf.AdminMessage.toBinary({
+    const resetPeers = AdminMessage.encodeBinary({
       payloadVariant: {
-        nodedbReset: 1,
-        oneofKind: "nodedbReset"
+        field: "nodedbReset",
+        value: 1
       }
     });
 
     await this.sendPacket(
       resetPeers,
-      Protobuf.PortNum.ADMIN_APP,
+      "ADMIN_APP",
       this.myNodeInfo.myNodeNum,
       true,
       0,
@@ -1078,14 +1092,14 @@ export abstract class IMeshDevice {
       Types.EmitterScope.iMeshDevice,
       Types.Emitter.configure,
       `⚙️ Requesting device configuration`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
     this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_CONFIGURING);
 
-    const toRadio = Protobuf.ToRadio.toBinary({
+    const toRadio = ToRadio.encodeBinary({
       payloadVariant: {
-        wantConfigId: this.configId,
-        oneofKind: "wantConfigId"
+        field: "wantConfigId",
+        value: this.configId
       }
     });
 
@@ -1121,34 +1135,34 @@ export abstract class IMeshDevice {
    * @param {Uint8Array} fromRadio Uint8Array containing raw radio data
    */
   protected async handleFromRadio(fromRadio: Uint8Array): Promise<void> {
-    const decodedMessage = Protobuf.FromRadio.fromBinary(fromRadio);
+    const decodedMessage = FromRadio.decodeBinary(fromRadio);
 
     this.onFromRadio.emit(decodedMessage);
 
     /** @todo Add map here when `all=true` gets fixed. */
-    switch (decodedMessage.payloadVariant.oneofKind) {
+    switch (decodedMessage.payloadVariant?.field) {
       case "packet":
-        await this.handleMeshPacket(decodedMessage.payloadVariant.packet);
+        await this.handleMeshPacket(decodedMessage.payloadVariant.value);
         break;
 
       case "myInfo":
         if (
-          parseFloat(decodedMessage.payloadVariant.myInfo.firmwareVersion) <
+          parseFloat(decodedMessage.payloadVariant.value.firmwareVersion) <
           minFwVer
         ) {
           this.log(
             Types.EmitterScope.iMeshDevice,
             Types.Emitter.handleFromRadio,
-            `Device firmware outdated. Min supported: ${minFwVer} got : ${decodedMessage.payloadVariant.myInfo.firmwareVersion}`,
-            Protobuf.LogRecord_Level.CRITICAL
+            `Device firmware outdated. Min supported: ${minFwVer} got : ${decodedMessage.payloadVariant.value.firmwareVersion}`,
+            "CRITICAL"
           );
         }
-        this.onMyNodeInfo.emit(decodedMessage.payloadVariant.myInfo);
+        this.onMyNodeInfo.emit(decodedMessage.payloadVariant.value);
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
           "📱 Received Node info for this device",
-          Protobuf.LogRecord_Level.TRACE
+          "TRACE"
         );
         break;
 
@@ -1156,34 +1170,34 @@ export abstract class IMeshDevice {
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
-          `📱 Received Node Info packet for node: ${decodedMessage.payloadVariant.nodeInfo.num}`,
-          Protobuf.LogRecord_Level.TRACE
+          `📱 Received Node Info packet for node: ${decodedMessage.payloadVariant.value.num}`,
+          "TRACE"
         );
 
         this.onNodeInfoPacket.emit({
-          packet: Protobuf.MeshPacket.create({
+          packet: MeshPacket.createValue({
             id: decodedMessage.id
           }),
-          data: decodedMessage.payloadVariant.nodeInfo
+          data: decodedMessage.payloadVariant.value
         });
 
-        if (decodedMessage.payloadVariant.nodeInfo.position) {
+        if (decodedMessage.payloadVariant.value.position) {
           this.onPositionPacket.emit({
-            packet: Protobuf.MeshPacket.create({
+            packet: MeshPacket.createValue({
               id: decodedMessage.id,
-              from: decodedMessage.payloadVariant.nodeInfo.num
+              from: decodedMessage.payloadVariant.value.num
             }),
-            data: decodedMessage.payloadVariant.nodeInfo.position
+            data: decodedMessage.payloadVariant.value.position
           });
         }
 
-        if (decodedMessage.payloadVariant.nodeInfo.user) {
+        if (decodedMessage.payloadVariant.value.user) {
           this.onUserPacket.emit({
-            packet: Protobuf.MeshPacket.create({
+            packet: MeshPacket.createValue({
               id: decodedMessage.id,
-              from: decodedMessage.payloadVariant.nodeInfo.num
+              from: decodedMessage.payloadVariant.value.num
             }),
-            data: decodedMessage.payloadVariant.nodeInfo.user
+            data: decodedMessage.payloadVariant.value.user
           });
         }
         break;
@@ -1193,23 +1207,20 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
           `${
-            decodedMessage.payloadVariant.config.payloadVariant.oneofKind
-              ? "💾"
-              : "⚠️"
+            decodedMessage.payloadVariant.value.payloadVariant ? "💾" : "⚠️"
           } Received Config packet of variant: ${
-            decodedMessage.payloadVariant.config.payloadVariant.oneofKind ??
-            "UNK"
+            decodedMessage.payloadVariant.value.payloadVariant?.field ?? "UNK"
           }`,
-          decodedMessage.payloadVariant.config.payloadVariant.oneofKind
-            ? Protobuf.LogRecord_Level.TRACE
-            : Protobuf.LogRecord_Level.WARNING
+          decodedMessage.payloadVariant.value.payloadVariant?.field
+            ? "TRACE"
+            : "WARNING"
         );
 
         this.onConfigPacket.emit({
-          packet: Protobuf.MeshPacket.create({
+          packet: MeshPacket.createValue({
             id: decodedMessage.id
           }),
-          data: decodedMessage.payloadVariant.config
+          data: decodedMessage.payloadVariant.value
         });
         break;
 
@@ -1218,18 +1229,18 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
           "Received onLogRecord",
-          Protobuf.LogRecord_Level.TRACE
+          "TRACE"
         );
-        this.onLogRecord.emit(decodedMessage.payloadVariant.logRecord);
+        this.onLogRecord.emit(decodedMessage.payloadVariant.value);
         break;
 
       case "configCompleteId":
-        if (decodedMessage.payloadVariant.configCompleteId !== this.configId) {
+        if (decodedMessage.payloadVariant.value !== this.configId) {
           this.log(
             Types.EmitterScope.iMeshDevice,
             Types.Emitter.handleFromRadio,
-            `❌ Invalid config id reveived from device, exptected ${this.configId} but received ${decodedMessage.payloadVariant.configCompleteId}`,
-            Protobuf.LogRecord_Level.ERROR
+            `❌ Invalid config id reveived from device, exptected ${this.configId} but received ${decodedMessage.payloadVariant.value}`,
+            "ERROR"
           );
         }
 
@@ -1237,24 +1248,22 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
           `⚙️ Valid config id reveived from device: ${this.configId}`,
-          Protobuf.LogRecord_Level.INFO
+          "INFO"
         );
 
-        await this.sendRaw(
-          0,
-          Protobuf.ToRadio.toBinary({
-            payloadVariant: {
-              peerInfo: {
-                appVersion: 1,
-                mqttGateway: false
-              },
-              oneofKind: "peerInfo"
-            }
-          }),
-          async () => {
-            //find out what this does
-          }
-        );
+        //TODO: remove protobufs
+        // await this.sendRaw(
+        //   0,
+        //   ToRadio.encodeBinary({
+        //     payloadVariant: {
+        //       peerInfo: {
+        //         appVersion: 1,
+        //         mqttGateway: false
+        //       },
+        //       oneofKind: "peerInfo"
+        //     }
+        //   })
+        // );
 
         this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_CONFIGURED);
         break;
@@ -1268,23 +1277,22 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
           `${
-            decodedMessage.payloadVariant.moduleConfig.payloadVariant.oneofKind
+            decodedMessage.payloadVariant.value.payloadVariant?.field
               ? "💾"
               : "⚠️"
           } Received Module Config packet of variant: ${
-            decodedMessage.payloadVariant.moduleConfig.payloadVariant
-              .oneofKind ?? "UNK"
+            decodedMessage.payloadVariant.value.payloadVariant?.field ?? "UNK"
           }`,
-          decodedMessage.payloadVariant.moduleConfig.payloadVariant.oneofKind
-            ? Protobuf.LogRecord_Level.TRACE
-            : Protobuf.LogRecord_Level.WARNING
+          decodedMessage.payloadVariant.value.payloadVariant?.field
+            ? "TRACE"
+            : "WARNING"
         );
 
         this.onModuleConfigPacket.emit({
-          packet: Protobuf.MeshPacket.create({
+          packet: MeshPacket.createValue({
             id: decodedMessage.id
           }),
-          data: decodedMessage.payloadVariant.moduleConfig
+          data: decodedMessage.payloadVariant.value
         });
         break;
 
@@ -1292,15 +1300,15 @@ export abstract class IMeshDevice {
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleFromRadio,
-          `🔐 Received Channel: ${decodedMessage.payloadVariant.channel.index}`,
-          Protobuf.LogRecord_Level.TRACE
+          `🔐 Received Channel: ${decodedMessage.payloadVariant.value.index}`,
+          "TRACE"
         );
 
         this.onChannelPacket.emit({
-          packet: Protobuf.MeshPacket.create({
+          packet: MeshPacket.createValue({
             id: decodedMessage.id
           }),
-          data: decodedMessage.payloadVariant.channel
+          data: decodedMessage.payloadVariant.value
         });
         break;
     }
@@ -1338,10 +1346,10 @@ export abstract class IMeshDevice {
   /**
    * Gets called when a MeshPacket is received from device
    *
-   * @param {Protobuf.MeshPacket} meshPacket Packet to process
+   * @param {MeshPacket} meshPacket Packet to process
    */
   private async handleMeshPacket(
-    meshPacket: Protobuf.MeshPacket
+    meshPacket: messages.MeshPacket
   ): Promise<void> {
     this.onMeshPacket.emit(meshPacket);
     if (meshPacket.from !== this.myNodeInfo.myNodeNum) {
@@ -1352,12 +1360,10 @@ export abstract class IMeshDevice {
       this.onMeshHeartbeat.emit(new Date());
     }
 
-    switch (meshPacket.payloadVariant.oneofKind) {
+    switch (meshPacket.payloadVariant?.field) {
       case "decoded":
-        await this.queue.processAck(
-          meshPacket.payloadVariant.decoded.requestId
-        );
-        this.handleDataPacket(meshPacket.payloadVariant.decoded, meshPacket);
+        await this.queue.processAck(meshPacket.payloadVariant.value.requestId);
+        this.handleDataPacket(meshPacket.payloadVariant.value, meshPacket);
         break;
 
       case "encrypted":
@@ -1365,24 +1371,24 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "Device received encrypted data packet, ignoring.",
-          Protobuf.LogRecord_Level.DEBUG
+          "DEBUG"
         );
         break;
     }
   }
 
   private handleDataPacket(
-    dataPacket: Protobuf.Data,
-    meshPacket: Protobuf.MeshPacket
+    dataPacket: messages.Data,
+    meshPacket: messages.MeshPacket
   ) {
-    let adminMessage: Protobuf.AdminMessage | undefined = undefined;
+    let adminMessage: messages.AdminMessage | undefined = undefined;
     switch (dataPacket.portnum) {
-      case Protobuf.PortNum.TEXT_MESSAGE_APP:
+      case "TEXT_MESSAGE_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received TEXT_MESSAGE_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onMessagePacket.emit({
@@ -1391,35 +1397,35 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.REMOTE_HARDWARE_APP:
+      case "REMOTE_HARDWARE_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received REMOTE_HARDWARE_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onRemoteHardwarePacket.emit({
           packet: meshPacket,
-          data: Protobuf.HardwareMessage.fromBinary(dataPacket.payload)
+          data: HardwareMessage.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.POSITION_APP:
+      case "POSITION_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received POSITION_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onPositionPacket.emit({
           packet: meshPacket,
-          data: Protobuf.Position.fromBinary(dataPacket.payload)
+          data: Position.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.NODEINFO_APP:
+      case "NODEINFO_APP":
         /**
          * TODO: workaround for NODEINFO_APP plugin sending a User protobuf
          * instead of a NodeInfo protobuf
@@ -1428,70 +1434,70 @@ export abstract class IMeshDevice {
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received NODEINFO_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onUserPacket.emit({
           packet: meshPacket,
-          data: Protobuf.User.fromBinary(dataPacket.payload)
+          data: User.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.ROUTING_APP:
+      case "ROUTING_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received ROUTING_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onRoutingPacket.emit({
           packet: meshPacket,
-          data: Protobuf.Routing.fromBinary(dataPacket.payload)
+          data: Routing.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.ADMIN_APP:
-        adminMessage = Protobuf.AdminMessage.fromBinary(dataPacket.payload);
+      case "ADMIN_APP":
+        adminMessage = AdminMessage.decodeBinary(dataPacket.payload);
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           `📦 Received ADMIN_APP packet of variant ${
             //change
-            adminMessage.payloadVariant.oneofKind ?? "UNK"
+            adminMessage.payloadVariant?.field ?? "UNK"
           }`,
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
-        switch (adminMessage.payloadVariant.oneofKind) {
+        switch (adminMessage.payloadVariant?.field) {
           case "getChannelResponse":
             this.onChannelPacket.emit({
               packet: meshPacket,
-              data: adminMessage.payloadVariant.getChannelResponse
+              data: adminMessage.payloadVariant.value
             });
             break;
           case "getOwnerResponse":
             this.onUserPacket.emit({
               packet: meshPacket,
-              data: adminMessage.payloadVariant.getOwnerResponse
+              data: adminMessage.payloadVariant.value
             });
             break;
           case "getConfigResponse":
             this.onConfigPacket.emit({
               packet: meshPacket,
-              data: adminMessage.payloadVariant.getConfigResponse
+              data: adminMessage.payloadVariant.value
             });
             break;
           case "getModuleConfigResponse":
             this.onModuleConfigPacket.emit({
               packet: meshPacket,
-              data: adminMessage.payloadVariant.getModuleConfigResponse
+              data: adminMessage.payloadVariant.value
             });
             break;
           case "getDeviceMetadataResponse":
             this.onDeviceMetadataPacket.emit({
               packet: meshPacket,
-              data: adminMessage.payloadVariant.getDeviceMetadataResponse
+              data: adminMessage.payloadVariant.value
             });
             break;
           default:
@@ -1499,44 +1505,44 @@ export abstract class IMeshDevice {
               Types.EmitterScope.iMeshDevice,
               Types.Emitter.handleMeshPacket,
               `Received unhandled AdminMessage, type ${
-                adminMessage.payloadVariant.oneofKind ?? "undefined"
+                adminMessage.payloadVariant?.field ?? "undefined"
               }`,
-              Protobuf.LogRecord_Level.DEBUG,
+              "DEBUG",
               dataPacket.payload
             );
         }
         break;
 
-      case Protobuf.PortNum.TEXT_MESSAGE_COMPRESSED_APP:
+      case "TEXT_MESSAGE_COMPRESSED_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received TEXT_MESSAGE_COMPRESSED_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         break;
 
-      case Protobuf.PortNum.WAYPOINT_APP:
+      case "WAYPOINT_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received WAYPOINT_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onWaypointPacket.emit({
           packet: meshPacket,
-          data: Protobuf.Waypoint.fromBinary(dataPacket.payload)
+          data: Waypoint.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.REPLY_APP:
+      case "REPLY_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received REPLY_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onPingPacket.emit({
@@ -1545,12 +1551,12 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.IP_TUNNEL_APP:
+      case "IP_TUNNEL_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received IP_TUNNEL_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onIpTunnelPacket.emit({
@@ -1559,12 +1565,12 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.SERIAL_APP:
+      case "SERIAL_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received SERIAL_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onSerialPacket.emit({
@@ -1573,12 +1579,12 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.STORE_FORWARD_APP:
+      case "STORE_FORWARD_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received STORE_FORWARD_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onStoreForwardPacket.emit({
@@ -1587,12 +1593,12 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.RANGE_TEST_APP:
+      case "RANGE_TEST_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received RANGE_TEST_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onRangeTestPacket.emit({
@@ -1601,26 +1607,26 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.TELEMETRY_APP:
+      case "TELEMETRY_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received TELEMETRY_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onTelemetryPacket.emit({
           packet: meshPacket,
-          data: Protobuf.Telemetry.fromBinary(dataPacket.payload)
+          data: Telemetry.decodeBinary(dataPacket.payload)
         });
         break;
 
-      case Protobuf.PortNum.PRIVATE_APP:
+      case "PRIVATE_APP":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received PRIVATE_APP packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onPrivatePacket.emit({
@@ -1629,12 +1635,12 @@ export abstract class IMeshDevice {
         });
         break;
 
-      case Protobuf.PortNum.ATAK_FORWARDER:
+      case "ATAK_FORWARDER":
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
           "📦 Received ATAK_FORWARDER packet",
-          Protobuf.LogRecord_Level.TRACE,
+          "TRACE",
           dataPacket.payload
         );
         this.onAtakPacket.emit({
@@ -1647,10 +1653,8 @@ export abstract class IMeshDevice {
         this.log(
           Types.EmitterScope.iMeshDevice,
           Types.Emitter.handleMeshPacket,
-          `⚠️ Received unhandled PortNum: ${
-            Protobuf.PortNum[dataPacket.portnum] ?? "UNK"
-          }`, //warn
-          Protobuf.LogRecord_Level.WARNING,
+          `⚠️ Received unhandled PortNum: ${dataPacket.portnum}`, //warn
+          "WARNING",
           dataPacket.payload
         );
         break;

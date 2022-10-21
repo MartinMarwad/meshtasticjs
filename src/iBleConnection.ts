@@ -1,4 +1,4 @@
-import { Protobuf, Types } from "./index.js";
+import { Types } from "./index.js";
 import {
   fromNumUUID,
   fromRadioUUID,
@@ -98,7 +98,7 @@ export class IBLEConnection extends IMeshDevice {
         Types.EmitterScope.iBleConnection,
         Types.Emitter.connect,
         `⚠️ This browser doesn't support the WebBluetooth API`,
-        Protobuf.LogRecord_Level.WARNING
+        "WARNING"
       );
     }
 
@@ -114,7 +114,7 @@ export class IBLEConnection extends IMeshDevice {
         Types.EmitterScope.iBleConnection,
         Types.Emitter.connect,
         "Device disconnected",
-        Protobuf.LogRecord_Level.INFO
+        "INFO"
       );
       this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_DISCONNECTED);
       this.complete();
@@ -128,7 +128,7 @@ export class IBLEConnection extends IMeshDevice {
           Types.EmitterScope.iBleConnection,
           Types.Emitter.connect,
           `✅ Got GATT Server for device: ${server.device.id}`,
-          Protobuf.LogRecord_Level.INFO
+          "INFO"
         );
         this.GATTServer = server;
       })
@@ -137,7 +137,7 @@ export class IBLEConnection extends IMeshDevice {
           Types.EmitterScope.iBleConnection,
           Types.Emitter.connect,
           `❌ Failed to connect: ${e.message}`,
-          Protobuf.LogRecord_Level.ERROR
+          "ERROR"
         );
       });
 
@@ -147,7 +147,7 @@ export class IBLEConnection extends IMeshDevice {
           Types.EmitterScope.iBleConnection,
           Types.Emitter.connect,
           `✅ Got GATT Service for device: ${service.device.id}`,
-          Protobuf.LogRecord_Level.INFO
+          "INFO"
         );
         this.service = service;
       })
@@ -156,7 +156,7 @@ export class IBLEConnection extends IMeshDevice {
           Types.EmitterScope.iBleConnection,
           Types.Emitter.connect,
           `❌ Failed to get primary service: q${e.message}`,
-          Protobuf.LogRecord_Level.ERROR
+          "ERROR"
         );
       });
 
@@ -167,8 +167,8 @@ export class IBLEConnection extends IMeshDevice {
           this.log(
             Types.EmitterScope.iBleConnection,
             Types.Emitter.connect,
-            `✅ Got Characteristic ${characteristic.uuid} for device: ${characteristic.name}`,
-            Protobuf.LogRecord_Level.INFO
+            `✅ Got Characteristic ${characteristic.uuid} for device: ${characteristic.uuid}`,
+            "INFO"
           );
           switch (uuid) {
             case toRadioUUID:
@@ -187,7 +187,7 @@ export class IBLEConnection extends IMeshDevice {
             Types.EmitterScope.iBleConnection,
             Types.Emitter.connect,
             `❌ Failed to get toRadio characteristic: q${e.message}`,
-            Protobuf.LogRecord_Level.ERROR
+            "ERROR"
           );
         });
     });
@@ -248,7 +248,7 @@ export class IBLEConnection extends IMeshDevice {
             Types.EmitterScope.iBleConnection,
             Types.Emitter.readFromRadio,
             `❌ ${e.message}`,
-            Protobuf.LogRecord_Level.ERROR
+            "ERROR"
           );
         });
     }

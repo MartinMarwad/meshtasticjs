@@ -1,4 +1,5 @@
-import { Protobuf, Types } from "../index.js";
+import { Level } from "../generated/imports.js";
+import { Types } from "../index.js";
 
 /**
  * Global event logger
@@ -13,12 +14,12 @@ export const log = (
   scope: Types.EmitterScope,
   emitter: Types.Emitter,
   message: string,
-  level: Protobuf.LogRecord_Level,
-  currentLevel: Protobuf.LogRecord_Level
+  level: Level,
+  currentLevel: Level
 ): void => {
   if (level >= currentLevel) {
     switch (level) {
-      case Protobuf.LogRecord_Level.TRACE:
+      case "TRACE":
         console.info(
           `%c[TRACE]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"
@@ -29,7 +30,7 @@ export const log = (
         );
         break;
 
-      case Protobuf.LogRecord_Level.DEBUG:
+      case "DEBUG":
         console.info(
           `%c[DEBUG]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"
@@ -40,7 +41,7 @@ export const log = (
         );
         break;
 
-      case Protobuf.LogRecord_Level.INFO:
+      case "INFO":
         console.info(
           `%c[INFO]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"
@@ -50,7 +51,7 @@ export const log = (
           "color:white"
         );
         break;
-      case Protobuf.LogRecord_Level.WARNING:
+      case "WARNING":
         console.warn(
           `%c[WARNING]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"
@@ -61,7 +62,7 @@ export const log = (
         );
         break;
 
-      case Protobuf.LogRecord_Level.ERROR:
+      case "ERROR":
         console.error(
           `%c[ERROR]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"
@@ -72,7 +73,7 @@ export const log = (
         );
         break;
 
-      case Protobuf.LogRecord_Level.CRITICAL:
+      case "CRITICAL":
         console.error(
           `%c[CRITICAL]%c ${Types.EmitterScope[scope] ?? "UNK"}.${
             Types.Emitter[emitter] ?? "UNK"

@@ -1,4 +1,4 @@
-import { Protobuf, Types } from "./index.js";
+import { Types } from "./index.js";
 import { IMeshDevice } from "./iMeshDevice.js";
 import { typedArrayToBuffer } from "./utils/general.js";
 
@@ -63,7 +63,7 @@ export class IHTTPConnection extends IMeshDevice {
         Types.EmitterScope.iHttpConnection,
         Types.Emitter.connect,
         `Ping succeeded, starting configuration and request timer.`,
-        Protobuf.LogRecord_Level.DEBUG
+        "DEBUG"
       );
       this.configure();
       this.readLoop = setInterval(() => {
@@ -72,7 +72,7 @@ export class IHTTPConnection extends IMeshDevice {
             Types.EmitterScope.iHttpConnection,
             Types.Emitter.connect,
             `❌ ${e.message}`,
-            Protobuf.LogRecord_Level.ERROR
+            "ERROR"
           );
         });
       }, fetchInterval);
@@ -106,7 +106,7 @@ export class IHTTPConnection extends IMeshDevice {
       Types.EmitterScope.iHttpConnection,
       Types.Emitter.ping,
       `Attempting device ping.`,
-      Protobuf.LogRecord_Level.DEBUG
+      "DEBUG"
     );
 
     const { signal } = this.abortController;
@@ -124,7 +124,7 @@ export class IHTTPConnection extends IMeshDevice {
           Types.EmitterScope.iHttpConnection,
           Types.Emitter.ping,
           `❌ ${e.message}`,
-          Protobuf.LogRecord_Level.ERROR
+          "ERROR"
         );
         this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_RECONNECTING);
       });
@@ -169,7 +169,7 @@ export class IHTTPConnection extends IMeshDevice {
             Types.EmitterScope.iHttpConnection,
             Types.Emitter.readFromRadio,
             `❌ ${e.message}`,
-            Protobuf.LogRecord_Level.ERROR
+            "ERROR"
           );
 
           this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_RECONNECTING);
@@ -201,7 +201,7 @@ export class IHTTPConnection extends IMeshDevice {
             Types.EmitterScope.iHttpConnection,
             Types.Emitter.writeToRadio,
             `❌ ${e.message}`,
-            Protobuf.LogRecord_Level.ERROR
+            "ERROR"
           );
         });
       })
@@ -210,7 +210,7 @@ export class IHTTPConnection extends IMeshDevice {
           Types.EmitterScope.iHttpConnection,
           Types.Emitter.writeToRadio,
           `❌ ${e.message}`,
-          Protobuf.LogRecord_Level.ERROR
+          "ERROR"
         );
         this.updateDeviceStatus(Types.DeviceStatusEnum.DEVICE_RECONNECTING);
       });
